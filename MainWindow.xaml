@@ -66,6 +66,11 @@
                                 <TextBlock Text="{Binding mName}" />
                             </HierarchicalDataTemplate>
                         </TreeView.ItemTemplate>
+                        <TreeView.ItemContainerStyle>
+                            <Style TargetType="{x:Type TreeViewItem}">
+                                <Setter Property="IsExpanded" Value="True" />
+                            </Style>
+                        </TreeView.ItemContainerStyle>
                         <TreeView.ContextMenu>
                             <ContextMenu>
                                 <MenuItem Name="tvComponentRmoveMenu" Header="削除" Click="tvComponentMenu_Click" />

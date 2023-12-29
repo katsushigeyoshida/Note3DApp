@@ -7,6 +7,9 @@ using System.Windows.Media.Imaging;
 
 namespace Note3DApp
 {
+    /// <summary>
+    /// 
+    /// </summary>
     public enum DISPMODE { disp2DXY, disp2DYZ, disp2DZX, disp3D }
 
     public class DataDrawing
@@ -67,7 +70,7 @@ namespace Note3DApp
         /// <param name="ope">操作の種別</param>
         /// <param name="locList">ロケイト座標リスト</param>
         /// <param name="lastPoint">最終マウス位置</param>
-        public void dragging(OPERATION ope, List<PointD> locList, PointD lastPoint)
+        public void dragging(OPERATION ope, List<PickData> pickData, List<PointD> locList, PointD lastPoint)
         {
             if (ope == OPERATION.non)
                 return;
@@ -114,12 +117,51 @@ namespace Note3DApp
                     if (locList.Count == 1)
                         mGDraw.drawWRectangle(locList[0], lastPoint);
                     break;
+                case OPERATION.translate:
+                    translateDragging(pickData, locList, lastPoint);
+                    break;
             }
 
             mGDraw.mPointType = 2;
             mGDraw.mPointSize = 2;
             mGDraw.drawWPoint(lastPoint);
         }
+
+        /// <summary>
+        /// 移動ドラッギング表示
+        /// </summary>
+        /// <param name="pickData">ピックデータ</param>
+        /// <param name="locList">ロケイトリスト</param>
+        /// <param name="lastPoint">最終ロケイト点</param>
+        public void translateDragging(List<PickData> pickData, List<PointD> locList, PointD lastPoint)
+        {
+            if (0 < locList.Count) {
+                PointD v = lastPoint - locList[0];
+                double[,] transMatrix = translate2Dmatrix3D(v, mDispMode);
+                for (int i = 0; i < pickData.Count; i++) {
+                    Element ele = pickData[i].mElement.toCopy();
+                    var matrix = ylib.matrixMulti(ele.mMatrix, transMatrix);
+                    ele.mPrimitive.draw2D(mGDraw, matrix, mDispMode);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 2Dの移動量を3Dマトリックスに変換
+        /// </summary>
+        /// <param name="v">2D移動ベクトル</param>
+        /// <param name="dispMode">2D面</param>
+        /// <returns>3D変換マトリックス</returns>
+        public double[,] translate2Dmatrix3D(PointD v, DISPMODE dispMode)
+        {
+            if (dispMode == DISPMODE.disp2DYZ)
+                return ylib.translate3DMatrix(0, v.x, v.y);
+            else if (dispMode == DISPMODE.disp2DZX)
+                return ylib.translate3DMatrix(v.y, 0, v.x);
+            else
+                return ylib.translate3DMatrix(v.x, v.y, 0);
+        }
+
 
         /// <summary>
         /// 指定Partsの表示
@@ -157,7 +199,7 @@ namespace Note3DApp
             } else {
                 if (grid)
                     dispGrid(mGridSize);
-                partsDraw2D(element, bitmap);
+                elementDraw2D(element, bitmap);
             }
         }
 
@@ -168,9 +210,13 @@ namespace Note3DApp
         /// <param name="bitmap">Bitmapのコピー</param>
         public void partsDraw2D(Parts parts, bool bitmap = true)
         {
-            foreach (var element in parts.mElements) {
-                element.mPrimitive.draw2D(mGDraw, mDispMode);
+            foreach (var part in parts.mParts) {
+                partsDraw2D(part, bitmap);
             }
+            foreach (var element in parts.mElements) {
+                element.mPrimitive.draw2D(mGDraw, element.mMatrix, mDispMode);
+            }
+
             if (bitmap)
                 mBitmapSource = ylib.canvas2Bitmap(mCanvas);
         }
@@ -180,9 +226,9 @@ namespace Note3DApp
         /// </summary>
         /// <param name="element">Elementデー</param>
         /// <param name="bitmap"Bitmapのコピー></param>
-        public void partsDraw2D(Element element, bool bitmap = true)
+        public void elementDraw2D(Element element, bool bitmap = true)
         {
-            element.mPrimitive.draw2D(mGDraw, mDispMode);
+            element.mPrimitive.draw2D(mGDraw, element.mMatrix, mDispMode);
             if (bitmap)
                 mBitmapSource = ylib.canvas2Bitmap(mCanvas);
         }
@@ -196,7 +242,7 @@ namespace Note3DApp
         {
             Brush tmpBrush = element.mPrimitive.mLineColor;
             element.mPrimitive.mLineColor = mPickColor;
-            partsDraw2D(element, bitmap);
+            elementDraw2D(element, bitmap);
             element.mPrimitive.mLineColor = tmpBrush;
         }
 
@@ -388,7 +434,7 @@ namespace Note3DApp
         /// <summary>
         /// 画面クリア
         /// </summary>
-        public void dispInit()
+        public void dispInit(bool bitmap = false)
         {
             mGDraw.clear();
             mGDraw.mFillColor = mBaseBackColor;
@@ -398,6 +444,8 @@ namespace Note3DApp
 
             mGDraw.mFillColor = null;
             mGDraw.mBrush = Brushes.Black;
+            if (bitmap)
+                mBitmapSource = ylib.canvas2Bitmap(mCanvas);
         }
 
         /// <summary>

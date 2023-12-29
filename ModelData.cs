@@ -3,6 +3,20 @@ using System.Windows.Media;
 
 namespace Note3DApp
 {
+    public class PickData
+    {
+        public Element mElement;
+        public PointD mPos;
+        public DISPMODE mDispMode;
+
+        public PickData(Element element, PointD pos, DISPMODE dispMode)
+        {
+            mElement = element;
+            mPos = pos;
+            mDispMode = dispMode;
+        }
+    }
+
     /// <summary>
     /// データ管理
     /// </summary>
@@ -14,10 +28,10 @@ namespace Note3DApp
         public Element mCurElement;                     //  カレントElementデータ
         public PRIMITIVEFACE mFace = PRIMITIVEFACE.xy;  //  Primitive 作成面
         public int mIndex = 0;                          //  データ寸デックス
-        public List<(int index, PointD pos, DISPMODE face)> mPickPos 
-            = new List<(int index, PointD pos, DISPMODE face)>();
+        public List<PickData> mPickElement = new List<PickData>();
 
         public Brush mPrimitiveBrush = Brushes.Green;
+        private YLib ylib = new YLib();
 
         /// <summary>
         /// コンストラクタ
@@ -74,14 +88,14 @@ namespace Note3DApp
         /// <summary>
         /// PickしたElementの
         /// </summary>
-        /// <param name="index"></param>
+        /// <param name="element"></param>
         /// <param name="pos"></param>
         /// <param name="face"></param>
         /// <returns></returns>
-        public int addPickElement(int index, PointD pos, DISPMODE face)
+        public int addPickElement(Element element, PointD pos, DISPMODE face)
         {
-            mPickPos.Add((index, pos, face));
-            return mPickPos.Count;
+            mPickElement.Add(new PickData(element, pos, face));
+            return mPickElement.Count;
         }
 
         /// <summary>
@@ -145,6 +159,16 @@ namespace Note3DApp
         }
 
         /// <summary>
+        /// ElementをRootからindexで検索
+        /// </summary>
+        /// <param name="index">index</param>
+        /// <returns>Element</returns>
+        public Element searchIndexElement(int index)
+        {
+            return searchIndexElement(mRootParts, index);
+        }
+
+        /// <summary>
         /// ElementをIndexで指定Partsから検索
         /// </summary>
         /// <param name="parts">Parts</param>
@@ -169,19 +193,33 @@ namespace Note3DApp
         /// PartsからPick対象のElementを検索する
         /// </summary>
         /// <param name="parts">Parts</param>
+        /// <param name="matrix">変換マトリックス</param>
         /// <param name="b">検索Box</param>
         /// <returns>検索リスト</returns>
-        public List<int> findIndex(Parts parts, Box b, PRIMITIVEFACE face)
+        public List<int> findIndex(Parts parts, double[,] matrix, Box b, PRIMITIVEFACE face)
         {
             List<int> picks = new List<int>();
+            matrix = ylib.matrixMulti(matrix, parts.mMatrix);
             for (int i = 0; i < parts.mParts.Count; i++)
-                picks.AddRange(findIndex(parts.mParts[i], b, face));
-            for (int i = 0; i < parts.mElements.Count; i++)
-                if (parts.mElements[i].mPrimitive.pickChk(b, face))
+                picks.AddRange(findIndex(parts.mParts[i], matrix, b, face));
+            for (int i = 0; i < parts.mElements.Count; i++) {
+                matrix = ylib.matrixMulti(matrix, parts.mElements[i].mMatrix);
+                if (parts.mElements[i].mPrimitive.pickChk(b, matrix, face))
                     picks.Add(parts.mElements[i].mIndex);
+            }
             return picks;
         }
 
+        /// <summary>
+        /// エレメントの色変更
+        /// </summary>
+        /// <param name="element"></param>
+        public void changeColor(Element element)
+        {
+            element.mPrimitive.mLineColor = mPrimitiveBrush;
+            element.mPrimitive.mFaceColors[0] = mPrimitiveBrush;
+            element.update3DData();
+        }
 
         /// <summary>
         /// カレントPartsに線分追加
@@ -303,6 +341,30 @@ namespace Note3DApp
             mCurElement.mName = "CUBE";
             mCurElement.mIndex = mIndex++;
             mCurParts.add(mCurElement);
+        }
+
+        private List<string[]> toDataList(Parts parts)
+        {
+            List<string[]> dataList = new List<string[]> ();
+            dataList.AddRange(parts.toDataList());
+            if (parts.mParts != null && 0 < parts.mParts.Count) {
+                for (int i = 0; i < parts.mParts.Count; i++) {
+                    dataList.AddRange(parts.mParts[i].toDataList());
+                }
+            }
+            if (parts.mElements != null && 0 < parts.mElements.Count) {
+                for (int i = 0; i < parts.mElements.Count; i++) {
+                    dataList.AddRange(parts.mElements[i].toDataList());
+                }
+            }
+            return dataList;
+        }
+
+        public void saveData(string path)
+        {
+            List<string[]> dataList = new List<string[]>();
+            dataList.AddRange(toDataList(mRootParts));
+            ylib.saveCsvData(path, dataList);
         }
     }
 }

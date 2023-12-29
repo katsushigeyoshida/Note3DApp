@@ -181,7 +181,7 @@ namespace Note3DApp
                     scroll(mPreMousePos, pos);
                 } else if (0 < mLocList.Count) {
                     //  ドラッギング表示
-                    mDrawing.dragging(mCommandOpe.mOperation, mLocList, wpos);
+                    mDrawing.dragging(mCommandOpe.mOperation, mModelData.mPickElement, mLocList, wpos);
                 }
             }
             dispStatus(wpos);
@@ -253,11 +253,12 @@ namespace Note3DApp
                     //  データ登録(データ数不定コマンド)
                     definData(mCommandOpe.mOperation, mModelData.mCurParts, mLocList, true);
                 } else {
+                    //  ピック色表示
                     for (int i = 0; i < picks.Count; i++) {
                         Element element = mModelData.searchIndexElement(mModelData.mCurParts, picks[i]);
                         if (element != null) {
                             mDrawing.pickPartDraw2D(element);
-                            mModelData.addPickElement(picks[i], wpos, mDrawing.mDispMode);
+                            mModelData.addPickElement(element, wpos, mDrawing.mDispMode);
                         }
                     }
                 }
@@ -319,15 +320,14 @@ namespace Note3DApp
                 } else if (level == COMMANDLEVEL.sub) {
                     //  サブコマンド
                     OPERATION ope = mCommandData.getCommand(menu);
-                    mOperationMode = mCommandOpe.execCommand(ope);
-                    if (mOperationMode == OPEMODE.non) {
+                    mOperationMode = mCommandOpe.execCommand(ope, mModelData.mPickElement);
+                    if (mOperationMode == OPEMODE.clear) {
+                        commandClear();
                         lbCommand.ItemsSource = mCommandData.getMainCommand();
-                    } else if (mOperationMode == OPEMODE.clear) {
-                        mDrawing.dispInit();
-                        mCommandOpe.mOperation = OPERATION.non;
-                        setTreeData(mModelData.mRootParts);         //  Treeに登録
+                    } else if (mOperationMode == OPEMODE.non) {
+                        commandClear();
+                        lbCommand.ItemsSource = mCommandData.getMainCommand();
                     }
-                    mLocList.Clear();
                 }
             }
             dispStatus(null);
@@ -387,7 +387,7 @@ namespace Note3DApp
         }
 
         /// <summary>
-        /// 釣りビューのコンテキストメニュー
+        /// ツリービューのコンテキストメニュー
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
@@ -424,6 +424,36 @@ namespace Note3DApp
         }
 
         /// <summary>
+        /// Primitiveデータの作成登録
+        /// </summary>
+        /// <param name="ope"></param>
+        /// <param name="parts"></param>
+        /// <param name="locList"></param>
+        private void definData(OPERATION ope, Parts parts, List<PointD> locList, bool last = false)
+        {
+            mCommandOpe.mDispeMode = mDrawing.mDispMode;
+            if (mCommandOpe.defineData(ope, mModelData.mPickElement, locList, last)) {
+                commandClear();
+            }
+        }
+
+        /// <summary>
+        /// コマンド処理をクリア
+        /// </summary>
+        /// <param name="opeMode"></param>
+        private void commandClear()
+        {
+            mCommandOpe.mOperation = OPERATION.non;
+            mOperationMode = OPEMODE.non;
+            mLocList.Clear();
+            mModelData.mPickElement.Clear();
+
+            setTreeData(mModelData.mRootParts);         //  Treeに更新
+            mDrawing.set3DData(mModelData.mCurParts);   //  Surfacedata再作成
+            mDrawing.partsDraw(mModelData.mCurParts);   //  再表示
+        }
+
+        /// <summary>
         /// ピックリストの取得
         /// </summary>
         /// <param name="pickPos">ピック位置</param>
@@ -432,7 +462,7 @@ namespace Note3DApp
         {
             double xd = mDrawing.screen2WorldXLength(mPickBoxSize);
             Box b = new Box(pickPos, xd);
-            return mModelData.findIndex(mModelData.mCurParts, b, mModelData.mFace);
+            return mModelData.findIndex(mModelData.mCurParts, ylib.unitMatrix(4), b, mModelData.mFace);
         }
 
         /// <summary>
@@ -473,24 +503,6 @@ namespace Note3DApp
         }
 
         /// <summary>
-        /// Primitiveデータの作成登録
-        /// </summary>
-        /// <param name="ope"></param>
-        /// <param name="parts"></param>
-        /// <param name="locList"></param>
-        private void definData(OPERATION ope, Parts parts, List<PointD> locList, bool last = false)
-        {
-            if (mCommandOpe.defineData(ope, locList, last)) {
-                mDrawing.set3DData(parts);                  //  3D Surfacedata登録
-                mDrawing.partsDraw(parts);                  //  2D/3D データ表示
-                setTreeData(mModelData.mRootParts);         //  Treeに登録
-                mCommandOpe.mOperation = OPERATION.non;
-                mLocList.Clear();
-                mModelData.mPickPos.Clear();
-            }
-        }
-
-        /// <summary>
         /// 2D表示のスクロール
         /// </summary>
         /// <param name="ps">始点(Screen)</param>
@@ -520,7 +532,7 @@ namespace Note3DApp
                 return;
             if (wpos == null)
                 wpos = mPrePosition;
-            tbStatus.Text = $"{mOperationMode} {wpos.ToString("f2")}";
+            tbStatus.Text = $"Mode [{mOperationMode}] Pick [{mModelData.mPickElement.Count}] Loc [{mLocList.Count}] {wpos.ToString("f2")}";
         }
 
         /// <summary>
