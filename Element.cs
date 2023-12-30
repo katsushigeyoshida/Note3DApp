@@ -1,6 +1,5 @@
 ﻿using CoreLib;
 using System.Windows.Media;
-using System.Xml.Linq;
 
 namespace Note3DApp
 {
@@ -44,8 +43,23 @@ namespace Note3DApp
 
         private YLib ylib = new YLib();
 
+        /// <summary>
+        /// コンストラクタ
+        /// </summary>
         public Element()
         {
+            clear();
+        }
+
+        /// <summary>
+        /// コンストラクタ
+        /// </summary>
+        /// <param name="name">エレメント名</param>
+        /// <param name="index">インデックス</param>
+        public Element(string name, int index)
+        {
+            mName = name;
+            mIndex = index;
             clear();
         }
 
@@ -81,7 +95,7 @@ namespace Note3DApp
         public string toString()
         {
             string buf = $"エレメント名:{mName} [{mIndex}]";
-            buf += $"\nプリミティブ:{mPrimitive.mPrimitiveId} {mPrimitive.mElelmentType} {mPrimitive.mPrimitiveFace} ";
+            buf += $"\nプリミティブ:{mPrimitive.mPrimitiveId} {mPrimitive.mElementType} {mPrimitive.mPrimitiveFace} ";
             buf += $"{ylib.getBrushName(mPrimitive.mLineColor)} {ylib.getBrushName(mPrimitive.mFaceColors[0])}";
             buf += $"\n移動: {mMatrix[3,0]} {mMatrix[3, 1]} {mMatrix[3, 2]}";
             buf += $"\n拡大縮小: {mMatrix[0, 0]} {mMatrix[1, 1]} {mMatrix[2, 2]}";
@@ -89,31 +103,128 @@ namespace Note3DApp
             return buf;
         }
 
+        /// <summary>
+        /// Elementデータを文字列配列リストに変換
+        /// </summary>
+        /// <returns>文字列配列リスト</returns>
         public List<string[]> toDataList()
         {
             List<string[]> list = new List<string[]>();
-            string[] buf = { "Element", "Name", mName, "Index", mIndex.ToString() };
+            string[] buf = { "Element", mName, mIndex.ToString() };
             list.Add(buf);
             list.Add(mPrimitive.toPropertyList().ToArray());
             list.Add(mPrimitive.toDataList().ToArray());
             int row = mMatrix.GetLength(0);
             int col = mMatrix.GetLength(1);
-            buf = new string[row * col + 1];
+            buf = new string[row * col + 3];
             buf[0] = "Matrix";
+            buf[1] = row.ToString();
+            buf[2] = col.ToString();
             for (int i = 0; i < row; i++) {
                 for (int j = 0; j < col; j++) {
-                    buf[i * col + j + 1] = mMatrix[i, j].ToString();
+                    buf[i * col + j + 3] = mMatrix[i, j].ToString();
                 }
             }
             list.Add(buf);
-            buf = new string[] { "End" };
+            buf = new string[] { "ElementEnd" };
             list.Add(buf);
             return list;
         }
 
-        public void setDataList(List<string[]> list)
+        /// <summary>
+        /// 文字列配列データを変換してElementデータに設定
+        /// </summary>
+        /// <param name="dataList">文字列配列リスト</param>
+        /// <param name="sp">リスト開始位置</param>
+        /// <returns>リスト終了位置</returns>
+        public int setDataList(List<string[]> dataList, int sp)
         {
+            while (sp < dataList.Count) {
+                string[] buf = dataList[sp++];
+                if (buf[0] == "PrimitiveId") {
+                    switch (buf[1]) {
+                        case "Line":
+                            LinePrimitive line = new LinePrimitive();
+                            line.setPropertyList(buf);
+                            buf = dataList[sp++];
+                            line.setDataList(buf);
+                            mPrimitive = line;
+                            break;
+                        case "Arc":
+                            ArcPrimitive arc = new ArcPrimitive();
+                            arc.setPropertyList(buf);
+                            buf = dataList[sp++];
+                            arc.setDataList(buf);
+                            mPrimitive = arc;
+                            break;
+                        case "Polyline":
+                            break;
+                        case "Polygon":
+                            PolygonPrimitive polygon = new PolygonPrimitive();
+                            polygon.setPropertyList(buf);
+                            buf = dataList[sp++];
+                            polygon.setDataList(buf);
+                            mPrimitive = polygon;
+                            break;
+                        case "WireCube":
+                            WireCubePrimitive wireCube = new WireCubePrimitive();
+                            wireCube.setPropertyList(buf);
+                            buf = dataList[sp++];
+                            wireCube.setDataList(buf);
+                            mPrimitive = wireCube;
+                            break;
+                        case "Cube":
+                            CubePrimitive cube = new CubePrimitive();
+                            cube.setPropertyList(buf);
+                            buf = dataList[sp++];
+                            cube.setDataList(buf);
+                            mPrimitive = cube;
+                            break;
 
+                    }
+                    if (mPrimitive != null)
+                        mPrimitive.createVertexList();
+                } else if (buf[0] == "Matrix") {
+                    int row = ylib.intParse(buf[1]);
+                    int col = ylib.intParse(buf[2]);
+                    for (int i = 0; i < row; i++) {
+                        for (int j = 0; j < col; j++) {
+                            mMatrix[i, j] = ylib.doubleParse(buf[i * col + j + 3]);
+                        }
+                    }
+                } else if (buf[0] == "ElementEnd") {
+                    break;
+                }
+            }
+            addVertex(mPrimitive.mVertexList, mPrimitive.mElementType, mPrimitive.mFaceColors);
+            return sp;
+        }
+
+        /// <summary>
+        /// 2D表示処理
+        /// </summary>
+        /// <param name="draw"></param>
+        /// <param name="mp">変換マトリックス</param>
+        /// <param name="face">表示面</param>
+        public void draw2D(Y3DDraw draw, double[,] mp, DISPMODE face)
+        {
+            mp = ylib.matrixMulti(mMatrix, mp);
+            mPrimitive.draw2D(draw, mp, face);
+        }
+
+        /// <summary>
+        /// 検索BoxによるPickの有無
+        /// </summary>
+        /// <param name="b">検索Box</param>
+        /// <param name="mp">変換マトリックス</param>
+        /// <param name="face">表示面</param>
+        /// <returns>Pickの有無</returns>
+        public int pickChk(Box b, double[,] mp, DISPMODE face)
+        {
+            mp = ylib.matrixMulti(mMatrix, mp);
+            if (mPrimitive.pickChk(b, mp, face))
+                return mIndex;
+            return -1;
         }
 
         /// <summary>
@@ -183,7 +294,7 @@ namespace Note3DApp
         /// </summary>
         public void update3DData()
         {
-            addVertex(mPrimitive.mVertexList, mPrimitive.mElelmentType, mPrimitive.mFaceColors);
+            addVertex(mPrimitive.mVertexList, mPrimitive.mElementType, mPrimitive.mFaceColors);
         }
 
 

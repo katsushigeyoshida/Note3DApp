@@ -70,5 +70,17 @@ namespace Note3DApp.Properties {
                 this["MainWindowHeight"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("")]
+        public string DataFile {
+            get {
+                return ((string)(this["DataFile"]));
+            }
+            set {
+                this["DataFile"] = value;
+            }
+        }
     }
 }

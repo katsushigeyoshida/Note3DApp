@@ -10,7 +10,7 @@ namespace Note3DApp
     /// <summary>
     /// 
     /// </summary>
-    public enum DISPMODE { disp2DXY, disp2DYZ, disp2DZX, disp3D }
+    public enum DISPMODE { XY, YZ, ZX, DISP3D }
 
     public class DataDrawing
     {
@@ -22,7 +22,7 @@ namespace Note3DApp
         public int mScrollSize = 19;                            //  キーによるスクロール単位
         public double mGridSize = 1.0;                          //  グリッドサイズ
         public int mGridMinmumSize = 8;                         //  グリッドの最小スクリーンサイズ
-        public DISPMODE mDispMode = DISPMODE.disp2DXY;          //  表示モード(XY,YZ,ZX,3D)
+        public DISPMODE mDispMode = DISPMODE.XY;                //  表示モード(XY,YZ,ZX,3D)
         public Y3DDraw mGDraw;                                  //  2D/3D表示ライブラリ
 
         private MainWindow mMainWindow;
@@ -50,8 +50,10 @@ namespace Note3DApp
         /// <param name="parts">部品データ</param>
         public void set3DData(Parts parts)
         {
-            mGDraw.clearData();
-            mGDraw.addData(parts.cnvDrawData(ylib.unitMatrix(4)));
+            if (parts != null) {
+                mGDraw.clearData();
+                mGDraw.addData(parts.cnvDrawData(ylib.unitMatrix(4)));
+            }
         }
 
         /// <summary>
@@ -120,6 +122,9 @@ namespace Note3DApp
                 case OPERATION.translate:
                     translateDragging(pickData, locList, lastPoint);
                     break;
+                case OPERATION.rotate:
+                    rotateDragging(pickData, locList, lastPoint);
+                    break;
             }
 
             mGDraw.mPointType = 2;
@@ -147,6 +152,25 @@ namespace Note3DApp
         }
 
         /// <summary>
+        /// 回転ののドラッギング表示
+        /// </summary>
+        /// <param name="pickData">ピックデータ</param>
+        /// <param name="locList">ロケイトリスト</param>
+        /// <param name="lastPoint">最終ロケイト点</param>
+        public void rotateDragging(List<PickData> pickData, List<PointD> locList, PointD lastPoint)
+        {
+            if (0 < locList.Count) {
+                double th = locList[0].angle() - lastPoint.angle();
+                double[,] transMatrix = rotate2Dmatrix3D(th, mDispMode);
+                for (int i = 0; i < pickData.Count; i++) {
+                    Element ele = pickData[i].mElement.toCopy();
+                    var matrix = ylib.matrixMulti(ele.mMatrix, transMatrix);
+                    ele.mPrimitive.draw2D(mGDraw, matrix, mDispMode);
+                }
+            }
+        }
+
+        /// <summary>
         /// 2Dの移動量を3Dマトリックスに変換
         /// </summary>
         /// <param name="v">2D移動ベクトル</param>
@@ -154,14 +178,29 @@ namespace Note3DApp
         /// <returns>3D変換マトリックス</returns>
         public double[,] translate2Dmatrix3D(PointD v, DISPMODE dispMode)
         {
-            if (dispMode == DISPMODE.disp2DYZ)
+            if (dispMode == DISPMODE.YZ)
                 return ylib.translate3DMatrix(0, v.x, v.y);
-            else if (dispMode == DISPMODE.disp2DZX)
+            else if (dispMode == DISPMODE.ZX)
                 return ylib.translate3DMatrix(v.y, 0, v.x);
             else
                 return ylib.translate3DMatrix(v.x, v.y, 0);
         }
 
+        /// <summary>
+        /// 2Dの回転角を3Dマトリックスに変換
+        /// </summary>
+        /// <param name="th">回転角</param>
+        /// <param name="dispMode">2D面</param>
+        /// <returns>3D変換マトリックス</returns>
+        public double[,] rotate2Dmatrix3D(double th, DISPMODE dispMode)
+        {
+            if (dispMode == DISPMODE.YZ)
+                return ylib.rotateX3DMatrix(th);
+            else if (dispMode == DISPMODE.ZX)
+                return ylib.rotateY3DMatrix(th);
+            else
+                return ylib.rotateZ3DMatrix(th);
+        }
 
         /// <summary>
         /// 指定Partsの表示
@@ -173,7 +212,7 @@ namespace Note3DApp
         {
             dispInit();
             if (parts == null) return;
-            if (mDispMode == DISPMODE.disp3D) {
+            if (mDispMode == DISPMODE.DISP3D) {
                 //  3Dデータの表示
                 mGDraw.drawSurfaceList();
             } else {
@@ -193,7 +232,7 @@ namespace Note3DApp
         {
             dispInit();
             if (element == null) return;
-            if (mDispMode == DISPMODE.disp3D) {
+            if (mDispMode == DISPMODE.DISP3D) {
                 //  3Dデータの表示
                 mGDraw.drawSurfaceList();
             } else {
@@ -210,13 +249,7 @@ namespace Note3DApp
         /// <param name="bitmap">Bitmapのコピー</param>
         public void partsDraw2D(Parts parts, bool bitmap = true)
         {
-            foreach (var part in parts.mParts) {
-                partsDraw2D(part, bitmap);
-            }
-            foreach (var element in parts.mElements) {
-                element.mPrimitive.draw2D(mGDraw, element.mMatrix, mDispMode);
-            }
-
+            parts.draw2D(mGDraw, ylib.unitMatrix(4), mDispMode);
             if (bitmap)
                 mBitmapSource = ylib.canvas2Bitmap(mCanvas);
         }

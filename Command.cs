@@ -19,7 +19,7 @@ namespace Note3DApp
         newModel, newParts, newElement,
         createLine, createArc, createCircle, createRect, createPolygon, createWireCube,
         createCube,
-        translate, rotate, mirror, strech, changeColor,
+        translate, rotate, mirror, strech, changeColor, remove,
         infoElement, infoParts,
         save, load, back, cancel, close
     }
@@ -70,6 +70,7 @@ namespace Note3DApp
             new Command("編集", "回転",             OPERATION.rotate),
             new Command("編集", "反転",             OPERATION.mirror),
             new Command("編集", "ストレッチ",       OPERATION.strech),
+            new Command("編集", "削除",             OPERATION.remove),
             new Command("編集", "カラー",           OPERATION.changeColor),
             new Command("編集", "戻る",             OPERATION.back),
             new Command("情報", "エレメント情報",   OPERATION.infoElement),
@@ -151,7 +152,7 @@ namespace Note3DApp
     {
         public ModelData mModelData;
         public OPERATION mOperation = OPERATION.non;
-        public DISPMODE mDispeMode = DISPMODE.disp2DXY;
+        public DISPMODE mDispeMode = DISPMODE.XY;
 
         public string mDataFilePath = "dataFile.csv";
         public MainWindow mMainWindow;
@@ -202,6 +203,10 @@ namespace Note3DApp
                 case OPERATION.rotate: break;
                 case OPERATION.mirror: break;
                 case OPERATION.strech: break;
+                case OPERATION.remove:
+                    remove(picks);
+                    opeMode = OPEMODE.clear;
+                    break;
                 case OPERATION.changeColor:
                     changeColor(picks);
                     opeMode = OPEMODE.clear;
@@ -222,12 +227,14 @@ namespace Note3DApp
                     opeMode = OPEMODE.non;
                     break;
                 case OPERATION.load:
+                    mModelData.loadData(mDataFilePath);
                     opeMode = OPEMODE.non;
                     break;
                 case OPERATION.cancel:
                     opeMode = OPEMODE.clear;
                     break;
                 case OPERATION.close:
+                    mModelData.saveData(mDataFilePath);
                     opeMode = OPEMODE.non;
                     mMainWindow.Close();
                     break;
@@ -310,9 +317,38 @@ namespace Note3DApp
                         return true;
                     }
                     break;
+                case OPERATION.rotate:
+                    if (locPos.Count == 2 && 0 < picks.Count) {
+                        double th = locPos[0].angle() - locPos[1].angle();
+                        for (int i = 0; i < picks.Count; i++) {
+                            Element element = picks[i].mElement;
+                            if (mDispeMode == DISPMODE.XY)
+                                element.addRotateZ(th);
+                            else if (mDispeMode == DISPMODE.YZ)
+                                element.addRotateX(th);
+                            else if (mDispeMode == DISPMODE.ZX)
+                                element.addRotateY(th);
+                        }
+                        locPos.Clear();
+                        return true;
+                    }
+                    break;
                 default: break;
             }
             return false;
+        }
+
+        /// <summary>
+        /// Elementの削除
+        /// </summary>
+        /// <param name="picks"></param>
+        private void remove(List<PickData> picks)
+        {
+            if (0 < picks.Count) {
+                for (int i = 0; i < picks.Count; i++) {
+                    mModelData.mCurParts.remove(picks[i].mElement.mIndex);
+                }
+            }
         }
 
         /// <summary>
@@ -355,9 +391,9 @@ namespace Note3DApp
         /// <summary>
         /// 全データ削除
         /// </summary>
-        public void newModel()
+        public void newModel(bool unmsg = false)
         {
-            if (ylib.messageBox(mMainWindow, "すべてのデータを削除します。", "", "確認", MessageBoxButton.YesNo) == System.Windows.MessageBoxResult.Yes) {
+            if (unmsg || ylib.messageBox(mMainWindow, "すべてのデータを削除します。", "", "確認", MessageBoxButton.YesNo) == System.Windows.MessageBoxResult.Yes) {
                 mModelData.mRootParts.clear();
                 mModelData.mCurParts = mModelData.mRootParts;
             }
@@ -391,6 +427,24 @@ namespace Note3DApp
                 if (0 < dlg.mEditText.Length)
                     mModelData.addElement(dlg.mEditText);
             }
+        }
+
+        /// <summary>
+        /// ファイルにデータを保存
+        /// </summary>
+        /// <param name="saveonly"></param>
+        public void saveFile(bool saveonly = false)
+        {
+            if (0 < mDataFilePath.Length)
+                mModelData.saveData(mDataFilePath);
+        }
+
+        /// <summary>
+        /// ファイルデータの読込
+        /// </summary>
+        public void loadFile()
+        {
+            mModelData.loadData(mDataFilePath);
         }
     }
 

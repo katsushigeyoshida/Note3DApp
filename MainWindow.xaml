@@ -15,7 +15,16 @@
         <DockPanel>
             <ToolBarTray x:Name="tbToolbarTray" DockPanel.Dock="Top" >
                 <ToolBar Height="25" >
-                    <ComboBox Name="cbDispFace" Width="100" SelectionChanged="cbDispFace_SelectionChanged" />
+                    <ComboBox Name="cbGenre" Width="80" ToolTip="大分類" SelectionChanged="cbGenre_SelectionChanged" >
+                        <ComboBox.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Name="cbGenreAddMenu" Header="追加" Click="cbGenreMenu_Click" />
+                                <MenuItem Name="cbGenreRenameMenu" Header="名前の変更" Click="cbGenreMenu_Click" />
+                                <MenuItem Name="cbGenreRemoveMenu" Header="削除" Click="cbGenreMenu_Click" />
+                            </ContextMenu>
+                        </ComboBox.ContextMenu>
+                    </ComboBox>
+                    <ComboBox Name="cbDispFace" Width="60" SelectionChanged="cbDispFace_SelectionChanged" />
                 </ToolBar>
                 <ToolBar>
                     <TextBlock Text="色" FontSize="11" VerticalAlignment="Center"/>
@@ -47,14 +56,21 @@
             </StackPanel>
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="10*" />
+                    <ColumnDefinition Width="30*" />
                     <ColumnDefinition Width="1*" />
-                    <ColumnDefinition Width="100*" />
+                    <ColumnDefinition Width="300*"/>
                 </Grid.ColumnDefinitions>
-                <ListBox x:Name="lbModel" Grid.Column="0">
+                <ListBox x:Name="lbItemList" Grid.Column="0" SelectionChanged="lbItemList_SelectionChanged">
+                    <ListBox.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Name="lbItemAddMenu" Header="追加" Click="lbItemMenu_Click" />
+                            <MenuItem Name="lbItemRenameMenu" Header="名前の変更" Click="lbItemMenu_Click" />
+                            <MenuItem Name="lbItemRemoveMenu" Header="削除" Click="lbItemMenu_Click" />
+                        </ContextMenu>
+                    </ListBox.ContextMenu>
                 </ListBox>
-                <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch" />
-                <Grid Grid.Column="2">
+                <GridSplitter HorizontalAlignment="Stretch" Grid.Column="1" />
+                <Grid Grid.Column="2" Grid.ColumnSpan="3" Margin="5,0,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="12*" />
                         <ColumnDefinition Width="1*" />

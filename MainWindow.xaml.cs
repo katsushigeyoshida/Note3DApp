@@ -1,5 +1,6 @@
 ﻿using CoreLib;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -46,6 +47,7 @@ namespace Note3DApp
         private ModelData mModelData;
         private CommandData mCommandData;
         private CommandOpe mCommandOpe;
+        private FileData mFileData;
 
         private YLib ylib = new YLib();
 
@@ -55,6 +57,8 @@ namespace Note3DApp
         public MainWindow()
         {
             InitializeComponent();
+
+            mFileData = new FileData(this);
 
             WindowFormLoad();
         }
@@ -81,7 +85,20 @@ namespace Note3DApp
             cbGridSize.ItemsSource = mGridSizeMenu;
             cbGridSize.SelectedIndex = mGridSizeMenu.FindIndex(Math.Abs(mDrawing.mGridSize));
 
-            setTreeData(mModelData.mRootParts);
+            mFileData.setBaseDataFolder();
+            mCommandOpe.mDataFilePath = mFileData.getCurItemFilePath();
+            cbGenre.ItemsSource = mFileData.getGenreList();
+            int index = cbGenre.Items.IndexOf(mFileData.mGenreName);
+            if (0 <= index) {
+                cbGenre.SelectedIndex = index;
+                mCommandOpe.loadFile();
+            } else {
+                if (0 < cbGenre.Items.Count) {
+                    mFileData.mGenreName = cbGenre.Items[0].ToString() ?? "";
+                    lbItemList.ItemsSource = mFileData.getItemFileList();
+                }
+            }
+            commandClear();
         }
 
         /// <summary>
@@ -138,6 +155,9 @@ namespace Note3DApp
                 Width = Properties.Settings.Default.MainWindowWidth;
                 Height = Properties.Settings.Default.MainWindowHeight;
             }
+
+            if (0 < Properties.Settings.Default.DataFile.Length)
+                mFileData.mDataName = Properties.Settings.Default.DataFile;
         }
 
         /// <summary>
@@ -145,6 +165,8 @@ namespace Note3DApp
         /// </summary>
         private void WindowFormSave()
         {
+            Properties.Settings.Default.DataFile = mFileData.mDataName;
+
             //  Windowの位置とサイズを保存(登録項目をPropeties.settingsに登録して使用する)
             Properties.Settings.Default.MainWindowTop = Top;
             Properties.Settings.Default.MainWindowLeft = Left;
@@ -153,6 +175,11 @@ namespace Note3DApp
             Properties.Settings.Default.Save();
         }
 
+        /// <summary>
+        /// キー入力
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
         private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
         {
             keyCommand(e.Key, e.KeyboardDevice.Modifiers == ModifierKeys.Control, e.KeyboardDevice.Modifiers == ModifierKeys.Shift);
@@ -170,15 +197,17 @@ namespace Note3DApp
             if (pos == mPreMousePos)
                 return;
             PointD wpos = mDrawing.screen2World(pos);
-            if (mDrawing.mDispMode == DISPMODE.disp3D) {
+            if (mDrawing.mDispMode == DISPMODE.DISP3D) {
                 //  3Dの回転・移動
                 mDrawing.mouse3DMove(mModelData.mCurParts, e.GetPosition(cvCanvas));
             } else {
                 //  2D表示操作
-                if (mMouseLeftButtonDown && mMouseScroolSize < ylib.distance(pos, mPreMousePos) &&
-                    (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control) {
+                if (mMouseLeftButtonDown && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control) {
                     //  2Dスクロール
-                    scroll(mPreMousePos, pos);
+                    if (mMouseScroolSize < ylib.distance(pos, mPreMousePos))
+                        scroll(mPreMousePos, pos);
+                    else
+                        return;
                 } else if (0 < mLocList.Count) {
                     //  ドラッギング表示
                     mDrawing.dragging(mCommandOpe.mOperation, mModelData.mPickElement, mLocList, wpos);
@@ -198,7 +227,8 @@ namespace Note3DApp
         {
             mMouseLeftButtonDown = true;
             Point pos = e.GetPosition(cvCanvas);
-            if (mDrawing.mDispMode == DISPMODE.disp3D) {
+            System.Diagnostics.Debug.WriteLine($"MouseLeftButtonDown {pos.ToString()}");
+            if (mDrawing.mDispMode == DISPMODE.DISP3D) {
                 //  3D回転開始
                 mDrawing.mouse3DRotateStart(e.GetPosition(cvCanvas));
             } else {
@@ -223,7 +253,7 @@ namespace Note3DApp
         /// <param name="e"></param>
         private void Window_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
-            if (mDrawing.mDispMode == DISPMODE.disp3D) {
+            if (mDrawing.mDispMode == DISPMODE.DISP3D) {
                 //  3D回転移動終了
                 mDrawing.mouse3DEnd();
             } else {
@@ -240,7 +270,7 @@ namespace Note3DApp
         private void Window_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
         {
             Point pos = e.GetPosition(cvCanvas);
-            if (mDrawing.mDispMode == DISPMODE.disp3D) {
+            if (mDrawing.mDispMode == DISPMODE.DISP3D) {
                 //  3D移動開始
                 mDrawing.mouse3DTlansLateStart(e.GetPosition(cvCanvas));
             } else {
@@ -248,7 +278,6 @@ namespace Note3DApp
                 mMouseRightButtonDown = true;
                 PointD wpos = mDrawing.screen2World(pos);
                 List<int> picks = getPickNo(wpos);
-                System.Diagnostics.Debug.WriteLine($"Pick:{picks.Count} {(picks.Count > 0 ? picks[0]: -1)}");
                 if (mOperationMode == OPEMODE.loc) {
                     //  データ登録(データ数不定コマンド)
                     definData(mCommandOpe.mOperation, mModelData.mCurParts, mLocList, true);
@@ -273,7 +302,7 @@ namespace Note3DApp
         /// <param name="e"></param>
         private void Window_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
         {
-            if (mDrawing.mDispMode == DISPMODE.disp3D) {
+            if (mDrawing.mDispMode == DISPMODE.DISP3D) {
                 //  3D回転移動終了
                 mDrawing.mouse3DEnd();
             } else {
@@ -290,7 +319,7 @@ namespace Note3DApp
         private void Window_MouseWheel(object sender, MouseWheelEventArgs e)
         {
             if (0 != e.Delta) {
-                if (mDrawing.mDispMode == DISPMODE.disp3D) {
+                if (mDrawing.mDispMode == DISPMODE.DISP3D) {
                     // 3D表示
                     mDrawing.mouse3DScale(mModelData.mCurParts, e.Delta);
                 } else {
@@ -321,10 +350,7 @@ namespace Note3DApp
                     //  サブコマンド
                     OPERATION ope = mCommandData.getCommand(menu);
                     mOperationMode = mCommandOpe.execCommand(ope, mModelData.mPickElement);
-                    if (mOperationMode == OPEMODE.clear) {
-                        commandClear();
-                        lbCommand.ItemsSource = mCommandData.getMainCommand();
-                    } else if (mOperationMode == OPEMODE.non) {
+                    if (mOperationMode == OPEMODE.clear || mOperationMode == OPEMODE.non) {
                         commandClear();
                         lbCommand.ItemsSource = mCommandData.getMainCommand();
                     }
@@ -342,8 +368,8 @@ namespace Note3DApp
         private void cbDispFace_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
             if (0 <= cbDispFace.SelectedIndex) {
-                mModelData.mFace = (PRIMITIVEFACE)Enum.ToObject(typeof(PRIMITIVEFACE), cbDispFace.SelectedIndex);
-                mDrawing.mDispMode = (DISPMODE)Enum.ToObject(typeof(DISPMODE), cbDispFace.SelectedIndex);
+                mModelData.mFace = (DISPMODE)Enum.ToObject(typeof(DISPMODE), cbDispFace.SelectedIndex);
+                mDrawing.mDispMode = mModelData.mFace;
                 mDrawing.partsDraw(mModelData.mCurParts);
             }
         }
@@ -374,6 +400,121 @@ namespace Note3DApp
         }
 
         /// <summary>
+        /// ジャンルの選択
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void cbGenre_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            int index = cbGenre.SelectedIndex;
+            if (0 <= index) {
+                mFileData.setGenreFolder(cbGenre.SelectedItem.ToString() ?? "");
+                lbItemList.ItemsSource = mFileData.getItemFileList();
+            }
+            dispTitle();
+        }
+
+        /// <summary>
+        /// モデルデータの選択
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void lbItemList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            int index = lbItemList.SelectedIndex;
+            if (0 <= index) {
+                mCommandOpe.saveFile(true);
+                mFileData.mDataName = lbItemList.Items[index].ToString() ?? "";
+                mCommandOpe.mDataFilePath = mFileData.getCurItemFilePath();
+                mCommandOpe.loadFile();
+                commandClear();
+            }
+            dispTitle();
+        }
+
+        /// <summary>
+        /// ジャンル選択のコンテキストメニュー
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void cbGenreMenu_Click(object sender, RoutedEventArgs e)
+        {
+            MenuItem menuItem = (MenuItem)e.Source;
+            if (menuItem.Name.CompareTo("cbGenreAddMenu") == 0) {
+                //  大分類(Genre)の追加
+                string genre = mFileData.addGenre();
+                if (0 < genre.Length) {
+                    cbGenre.ItemsSource = mFileData.getGenreList();
+                    int index = cbGenre.Items.IndexOf(genre);
+                    if (0 <= index)
+                        cbGenre.SelectedIndex = index;
+                }
+            } else if (menuItem.Name.CompareTo("cbGenreRenameMenu") == 0) {
+                //  大分類名の変更
+                string genre = mFileData.renameGenre(cbGenre.SelectedItem.ToString() ?? "");
+                if (0 < genre.Length) {
+                    cbGenre.ItemsSource = mFileData.getGenreList();
+                    int index = cbGenre.Items.IndexOf(genre);
+                    if (0 <= index)
+                        cbGenre.SelectedIndex = index;
+                }
+            } else if (menuItem.Name.CompareTo("cbGenreRemoveMenu") == 0) {
+                //  大分類名の削除
+                if (mFileData.removeGenre(cbGenre.SelectedItem.ToString() ?? "")) {
+                    cbGenre.ItemsSource = mFileData.getGenreList();
+                    if (0 < cbGenre.Items.Count)
+                        cbGenre.SelectedIndex = 0;
+                }
+            }
+            dispTitle();
+        }
+
+        /// <summary>
+        /// モデルデータ選択のコンテキストメニュー
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void lbItemMenu_Click(object sender, RoutedEventArgs e)
+        {
+            MenuItem menuItem = (MenuItem)e.Source;
+            string itemName = null;
+            if (0 <= lbItemList.SelectedIndex)
+                itemName = lbItemList.SelectedItem.ToString() ?? "";
+
+            mCommandOpe.saveFile(true);
+            if (menuItem.Name.CompareTo("lbItemAddMenu") == 0) {
+                //  図面(Item)の追加
+                itemName = mFileData.addItem();
+                if (0 < itemName.Length) {
+                    mCommandOpe.newModel(true);
+                    commandClear();
+                    mCommandOpe.mDataFilePath = mFileData.getItemFilePath(itemName);
+                    mCommandOpe.saveFile(true);
+                    lbItemList.ItemsSource = mFileData.getItemFileList();
+                    lbItemList.SelectedIndex = lbItemList.Items.IndexOf(itemName);
+                }
+            } else if (menuItem.Name.CompareTo("lbItemRenameMenu") == 0 && itemName != null) {
+                //  図面名の変更
+                itemName = mFileData.renameItem(itemName);
+                if (0 < itemName.Length) {
+                    mCommandOpe.mDataFilePath = mFileData.getItemFilePath(itemName);
+                    mCommandOpe.loadFile();
+                    lbItemList.ItemsSource = mFileData.getItemFileList();
+                    lbItemList.SelectedIndex = lbItemList.Items.IndexOf(itemName);
+                }
+            } else if (menuItem.Name.CompareTo("lbItemRemoveMenu") == 0 && itemName != null) {
+                //  図面の削除
+                if (mFileData.removeItem(itemName)) {
+                    lbItemList.ItemsSource = mFileData.getItemFileList();
+                    mCommandOpe.mDataFilePath = "";
+                    if (0 < lbItemList.Items.Count)
+                        lbItemList.SelectedIndex = 0;
+                }
+            }
+            dispTitle();
+        }
+
+        /// <summary>
         /// ツリービューの部品選択
         /// </summary>
         /// <param name="sender"></param>
@@ -399,7 +540,9 @@ namespace Note3DApp
                 if (menuItem.Name.CompareTo("tvComponentRmoveMenu") == 0) {
                     removeComponent(item.mIndex);
                 } else if (menuItem.Name.CompareTo("tvComponentCopyMenu") == 0) {
+
                 } else if (menuItem.Name.CompareTo("tvComponentMoveMenu") == 0) {
+
                 }
             }
             dispTitle();
@@ -413,14 +556,13 @@ namespace Note3DApp
         /// <param name="shift"></param>
         private void keyCommand(Key key, bool control, bool shift)
         {
-            if (mDrawing.mDispMode == DISPMODE.disp3D) {
+            if (mDrawing.mDispMode == DISPMODE.DISP3D) {
                 // 3D表示
                 mDrawing.key3DMove(mModelData.mCurParts, key, control, shift);
             } else {
                 //  2D表示
                 mDrawing.key2DMove(mModelData.mCurParts, key, control, shift);
             }
-
         }
 
         /// <summary>
@@ -462,7 +604,7 @@ namespace Note3DApp
         {
             double xd = mDrawing.screen2WorldXLength(mPickBoxSize);
             Box b = new Box(pickPos, xd);
-            return mModelData.findIndex(mModelData.mCurParts, ylib.unitMatrix(4), b, mModelData.mFace);
+            return mModelData.findIndex(mModelData.mCurParts, b, mDrawing.mDispMode);
         }
 
         /// <summary>
@@ -540,10 +682,13 @@ namespace Note3DApp
         /// </summary>
         private void dispTitle()
         {
-            if (mModelData.mCurElement == null)
-                Title = $"Note3D [{mModelData.mCurParts.mName}]";
+            string filename = Path.GetFileNameWithoutExtension(mCommandOpe.mDataFilePath);
+            if (mModelData.mCurParts == null)
+                Title = $"Note3D [{filename}]";
+            else if (mModelData.mCurElement == null)
+                Title = $"Note3D [{filename}] [{mModelData.mCurParts.mName}]";
             else
-                Title = $"Note3D [{mModelData.mCurParts.mName}][{mModelData.mCurElement.mName}]";
+                Title = $"Note3D [{filename}] [{mModelData.mCurParts.mName}][{mModelData.mCurElement.mName}]";
         }
 
         /// <summary>

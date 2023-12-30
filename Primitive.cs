@@ -1,7 +1,5 @@
 ﻿using CoreLib;
-using System.Windows.Interop;
 using System.Windows.Media;
-using System.Windows.Shapes;
 
 namespace Note3DApp
 {
@@ -28,27 +26,26 @@ namespace Note3DApp
         Cube, Cylinder, Sphere, Cone,
         Rotation, Push, Sweep
     }
-    public enum PRIMITIVEFACE { xy, yz, zx }
 
     /// <summary>
     /// Primitiveの属性
     /// </summary>
     public abstract class Primitive
     {
-        public PrimitiveId mPrimitiveId = PrimitiveId.Non;
-        public Brush mLineColor = Brushes.Black;
-        public double mLineThickness = 1.0;
-        public List<Brush> mFaceColors = new List<Brush>() { Brushes.Black };
-        public ELEMENTTYPE mElelmentType;
-        public PRIMITIVEFACE mPrimitiveFace = PRIMITIVEFACE.xy;
-        public List<Point3D> mVertexList;
+        public PrimitiveId mPrimitiveId = PrimitiveId.Non;                      //  種別
+        public Brush mLineColor = Brushes.Black;                                //  線の色
+        public double mLineThickness = 1.0;                                     //  線の太さ
+        public List<Brush> mFaceColors = new List<Brush>() { Brushes.Black };   //  面の色
+        public ELEMENTTYPE mElementType;                                        //  3D表示方法(LINES,LINE_STRIP...
+        public DISPMODE mPrimitiveFace = DISPMODE.XY;                     //  表示面(xy,yz,zx)
+        public List<Point3D> mVertexList;                                       //  3D座標データ
 
         public YLib ylib = new YLib();
+
         /// <summary>
         /// 3D座標リストの作成
         /// </summary>
-        /// <returns>座標リスト</returns>
-        public abstract List<Point3D> createVertexList();
+        public abstract void createVertexList();
 
         /// <summary>
         /// Elementデータ(Surface)の作成
@@ -57,12 +54,19 @@ namespace Note3DApp
         public abstract Element createElement();
 
         /// <summary>
-        /// 2D表示(XY/YZ/ZX)
+        /// 2D 表示(XY/YZ/ZX)
         /// </summary>
         /// <param name="draw">グラフィック</param>
         /// <param name="mp">変換マトリックス</param>
         /// <param name="face">表示面</param>
-        public abstract void draw2D(Y3DDraw draw, double[,] mp, DISPMODE face);
+        public void draw2D(Y3DDraw draw, double[,] mp, DISPMODE face)
+        {
+            draw.mBrush = mLineColor;
+            draw.mThickness = mLineThickness;
+            List<List<PointD>> pplist = conv3DVertex2PolylineList(mVertexList, mp, face);
+            foreach (var plist in pplist)
+                draw.drawWPolyline(plist);
+        }
 
         /// <summary>
         /// Boxのピックの有無を調べる
@@ -71,22 +75,39 @@ namespace Note3DApp
         /// <param name="mp">変換マトリックス</param>
         /// <param name="face">表示面</param>
         /// <returns>ピックの有無</returns>
-        public abstract bool pickChk(Box b, double[,] matrix, PRIMITIVEFACE face);
+        //public abstract bool pickChk(Box b, double[,] matrix, PRIMITIVEFACE face);
+        public bool pickChk(Box b, double[,] matrix, DISPMODE face)
+        {
+            List<List<PointD>> pplist = conv3DVertex2PolylineList(mVertexList, matrix, face);
+            foreach (var plist in pplist) {
+                if (0 < b.intersection(plist, false, true).Count ||  b.insideChk(plist))
+                    return true;
+            }
+            return false;
+        }
 
-        public abstract List<string> toDataList();
+        /// <summary>
+        /// 固有データを文字列配列に変換
+        /// </summary>
+        /// <returns>文字列配列</returns>
+        public abstract string[] toDataList();
 
-        public abstract void setDataList(List<string> list);
+        /// <summary>
+        /// 文字列配列から固有データを設定
+        /// </summary>
+        /// <param name="list">文字列配列</param>
+        public abstract void setDataList(string[] list);
 
         /// <summary>
         /// プロパティデータを文字列リストに変換
         /// </summary>
         /// <returns>文字列リスト</returns>
-        public List<string> toPropertyList()
+        public string[] toPropertyList()
         {
             List<string> dataList = new List<string> {
                 "PrimitiveId",      mPrimitiveId.ToString(),
                 "PrimitiveFace",    mPrimitiveFace.ToString(),
-                "ElelmentType",     mElelmentType.ToString(),
+                "ElelmentType",     mElementType.ToString(),
                 "LineColor",        ylib.getBrushName(mLineColor),
                 "LineThickness",    mLineThickness.ToString(),
                 "FaceColors",       mFaceColors.Count.ToString()
@@ -94,31 +115,32 @@ namespace Note3DApp
             for (int i = 0; i < mFaceColors.Count; i++)
                 dataList.Add(ylib.getBrushName(mFaceColors[i]));
 
-            return dataList;
+            return dataList.ToArray();
         }
 
         /// <summary>
         /// 文字列データを設定する
         /// </summary>
         /// <param name="list">文字列リスト</param>
-        public void setPropertyList(List<string> list)
+        public void setPropertyList(string[] list)
         {
-            if (list == null || list.Count == 0)
+            if (list == null || list.Length == 0)
                 return;
             int ival;
             double val;
-            for (int i = 0; i < list.Count; i++) {
+            for (int i = 0; i < list.Length; i++) {
                 if (list[i] == "PrimitiveId") {
                     mPrimitiveId = (PrimitiveId)Enum.Parse(typeof(PrimitiveId), list[++i]);
                 } else if (list[i] == "PrimitiveFace") {
-                    mPrimitiveFace = (PRIMITIVEFACE)Enum.Parse(typeof(PRIMITIVEFACE), list[++i]);
+                    mPrimitiveFace = (DISPMODE)Enum.Parse(typeof(DISPMODE), list[++i]);
                 } else if (list[i] == "ElelmentType") {
-                    mElelmentType = (ELEMENTTYPE)Enum.Parse(typeof(ELEMENTTYPE), list[++i]);
+                    mElementType = (ELEMENTTYPE)Enum.Parse(typeof(ELEMENTTYPE), list[++i]);
                 } else if (list[i] == "LineColor") {
                     mLineColor = ylib.getBrsh(list[++i]);
                 } else if (list[i] == "LineThickness") {
                     mLineThickness = double.TryParse(list[++i], out val) ? val : 1;
                 } else if (list[i] == "FaceColors") {
+                    mFaceColors.Clear();
                     int count = int.TryParse(list[++i], out ival) ? ival : 0;
                     for (int j = 0; j < count; j++) {
                         mFaceColors.Add(ylib.getBrsh(list[++i]));
@@ -128,17 +150,95 @@ namespace Note3DApp
         }
 
         /// <summary>
+        /// 3Dの座標データをPolylineのリストに変換
+        /// </summary>
+        /// <param name="vertexList">3D座標データ</param>
+        /// <param name="mp">変換マトリックス</param>
+        /// <param name="face">表示面</param>
+        /// <returns>2D座標リスト</returns>
+        private List<List<PointD>> conv3DVertex2PolylineList(List<Point3D> vertexList, double[,] mp, DISPMODE face)
+        {
+            List<List<PointD>> pplist = new List<List<PointD>>();
+            List<Point3D> vlist = vertexList.ConvertAll(p => p.toMatrix(mp));
+            List<PointD> plist = cnvPoint3D2PointD(vlist, face);
+            List<PointD> buf = new List<PointD>();
+
+            for (int i = 0; i < plist.Count; i++) {
+                buf.Add(plist[i]);
+                if (mElementType == ELEMENTTYPE.LINES) {
+                    if (buf.Count == 2) {
+                        pplist.Add(buf);
+                        buf = new List<PointD>();
+                    }
+                } else if (mElementType == ELEMENTTYPE.LINE_STRIP) {
+                    if (buf.Count == 2) {
+                        pplist.Add(buf);
+                        buf = new List<PointD>();
+                        buf.Add(plist[i]);
+                    }
+                } else if (mElementType == ELEMENTTYPE.LINE_LOOP) {
+                    if (buf.Count == 2) {
+                        pplist.Add(buf);
+                        buf = new List<PointD>();
+                        buf.Add(plist[i]);
+                        if (i == plist.Count - 1) {
+                            buf.Add(plist[0]);
+                            pplist.Add(buf);
+                        }
+                    }
+                } else if (mElementType == ELEMENTTYPE.TRIANGLES) {
+                    if (buf.Count == 3) {
+                        pplist.Add(buf);
+                        buf = new List<PointD>();
+                    }
+                } else if (mElementType == ELEMENTTYPE.QUADS) {
+                    if (buf.Count == 4) {
+                        pplist.Add(buf);
+                        buf = new List<PointD>();
+                    }
+                } else if (mElementType == ELEMENTTYPE.TRIANGLE_STRIP) {
+                    if (buf.Count == 3) {
+                        pplist.Add(buf);
+                        buf = new List<PointD>();
+                        buf.Add(plist[i - 1]);
+                        buf.Add(plist[i]);
+                    }
+                } else if (mElementType == ELEMENTTYPE.QUAD_STRIP) {
+                    if (buf.Count == 4) {
+                        PointD tp = buf[3];
+                        buf[3] = buf[2];
+                        buf[2] = tp;
+                        pplist.Add(buf);
+                        buf = new List<PointD>();
+                        buf.Add(plist[i - 1]);
+                        buf.Add(plist[i]);
+                    }
+                } else if (mElementType == ELEMENTTYPE.TRIANGLE_FAN) {
+                    if (buf.Count == 3) {
+                        pplist.Add(buf);
+                        buf = new List<PointD>();
+                        buf.Add(plist[0]);
+                    }
+                }
+            }
+            if (mElementType == ELEMENTTYPE.POLYGON) {
+                pplist.Add(buf);
+            }
+            return pplist;
+        }
+
+        /// <summary>
         /// 2Dデータから3Dデータに変換
         /// </summary>
         /// <param name="plist">2D座標リスト</param>
         /// <param name="face">座標面(xy/yz/zx)</param>
         /// <returns></returns>
-        public List<Point3D> cnvPointD2Point3D(List<PointD> plist, PRIMITIVEFACE face)
+        public List<Point3D> cnvPointD2Point3D(List<PointD> plist, DISPMODE face)
         {
             List<Point3D> vertexList;
-            if (mPrimitiveFace == PRIMITIVEFACE.xy)
+            if (face == DISPMODE.XY)
                 vertexList = plist.ConvertAll(p => new Point3D(p.x, p.y, 0));
-            else if (mPrimitiveFace == PRIMITIVEFACE.yz)
+            else if (face == DISPMODE.YZ)
                 vertexList = plist.ConvertAll(p => new Point3D(0, p.x, p.y));
             else
                 vertexList = plist.ConvertAll(p => new Point3D(p.y, 0, p.x));
@@ -151,12 +251,12 @@ namespace Note3DApp
         /// <param name="plist">3D座標リスト</param>
         /// <param name="face">座標面</param>
         /// <returns>2D座標リスト</returns>
-        public List<PointD> cnvPoint3D2PointD(List<Point3D> plist, PRIMITIVEFACE face)
+        public List<PointD> cnvPoint3D2PointD(List<Point3D> plist, DISPMODE face)
         {
             List<PointD> vertexList;
-            if (face == PRIMITIVEFACE.xy)
+            if (face == DISPMODE.XY)
                 vertexList = plist.ConvertAll(p => p.toPointXY());
-            else if (face == PRIMITIVEFACE.yz)
+            else if (face == DISPMODE.YZ)
                 vertexList = plist.ConvertAll(p => p.toPointYZ());
             else
                 vertexList = plist.ConvertAll(p => p.toPointZX());
@@ -201,27 +301,26 @@ namespace Note3DApp
         /// <param name="sp">始点</param>
         /// <param name="ep">終点</param>
         /// <param name="face">作成面</param>
-        public LinePrimitive(PointD sp, PointD ep, PRIMITIVEFACE face = PRIMITIVEFACE.xy)
+        public LinePrimitive(PointD sp, PointD ep, DISPMODE face = DISPMODE.XY)
         {
             mPrimitiveId = PrimitiveId.Line;
-            mElelmentType = ELEMENTTYPE.LINES;
+            mElementType = ELEMENTTYPE.LINES;
             mPrimitiveFace = face;
             mSp = sp;
             mEp = ep;
-            mVertexList = createVertexList();
+            createVertexList();
         }
 
         /// <summary>
         /// 3D座標リストの作成
         /// </summary>
         /// <returns>座標リスト</returns>
-        public override List<Point3D> createVertexList()
+        public override void createVertexList()
         {
-            List<Point3D> vertexList = new List<Point3D>() {
+            mVertexList = new List<Point3D>() {
                 new Point3D(mSp, (int)mPrimitiveFace),
                 new Point3D(mEp, (int)mPrimitiveFace),
             };
-            return vertexList;
         }
 
         /// <summary>
@@ -231,51 +330,16 @@ namespace Note3DApp
         public override Element createElement()
         {
             Element element = new Element();
-            element.addVertex(mVertexList, mElelmentType, mFaceColors);
+            element.addVertex(mVertexList, mElementType, mFaceColors);
 
             return element;
         }
 
         /// <summary>
-        /// 2D 表示(XY/YZ/ZX)
+        /// 固有データを文字列配列に変換
         /// </summary>
-        /// <param name="draw">グラフィック</param>
-        /// <param name="mp">変換マトリックス</param>
-        /// <param name="face">表示面</param>
-        public override void draw2D(Y3DDraw draw, double[,] mp, DISPMODE face)
-        {
-            draw.mBrush = mLineColor;
-            draw.mThickness = mLineThickness;
-            PointD ps, pe;
-            if (face == DISPMODE.disp2DXY) {
-                ps = mVertexList[0].toMatrix(mp).toPointXY();
-                pe = mVertexList[1].toMatrix(mp).toPointXY();
-            } else if (face == DISPMODE.disp2DYZ) {
-                ps = mVertexList[0].toMatrix(mp).toPointYZ();
-                pe = mVertexList[1].toMatrix(mp).toPointYZ();
-            } else if (face == DISPMODE.disp2DZX) {
-                ps = mVertexList[0].toMatrix(mp).toPointZX();
-                pe = mVertexList[1].toMatrix(mp).toPointZX();
-            } else {
-                return;
-            }
-            draw.drawWLine(ps, pe);
-        }
-
-        /// <summary>
-        /// Boxのピックの有無を調べる
-        /// </summary>
-        /// <param name="b">ピック領域</param>
-        /// <param name="mp">変換マトリックス</param>
-        /// <param name="face">表示面</param>
-        /// <returns>ピックの有無</returns>
-        public override bool pickChk(Box b, double[,] matrix, PRIMITIVEFACE face)
-        {
-            List<Point3D> vlist = mVertexList.ConvertAll(p => p.toMatrix(matrix));
-            return insideCrossChk(cnvPoint3D2PointD(vlist, face), b);
-        }
-
-        public override List<string> toDataList()
+        /// <returns>文字列配列</returns>
+        public override string[] toDataList()
         {
             List<string> dataList = new List<string>() {
                 "LineData",
@@ -283,15 +347,19 @@ namespace Note3DApp
                 "Ep", mEp.x.ToString(), mEp.y.ToString(),
             };
 
-            return dataList;
+            return dataList.ToArray();
         }
 
-        public override void setDataList(List<string> list)
+        /// <summary>
+        /// 文字列配列から固有データを設定
+        /// </summary>
+        /// <param name="list">文字列配列</param>
+        public override void setDataList(string[] list)
         {
-            if (0 == list.Count || list[0] != "LineData")
+            if (0 == list.Length || list[0] != "LineData")
                 return;
             double val;
-            for (int i = 1; i < list.Count; i++) {
+            for (int i = 1; i < list.Length; i++) {
                 if (list[i] == "Sp") {
                     mSp.x = double.TryParse(list[++i], out val) ? val : 0;
                     mSp.y = double.TryParse(list[++i], out val) ? val : 0;
@@ -311,30 +379,33 @@ namespace Note3DApp
         public ArcD mArc;
         public int mDiv = 40;
 
+        public ArcPrimitive()
+        {
+            mArc = new ArcD();
+        }
+
         /// <summary>
         /// コンストラクタ
         /// </summary>
         /// <param name="arc">円弧データ</param>
         /// <param name="face">作成面</param>
-        public ArcPrimitive(ArcD arc, PRIMITIVEFACE face = PRIMITIVEFACE.xy)
+        public ArcPrimitive(ArcD arc, DISPMODE face = DISPMODE.XY)
         {
             mPrimitiveId = PrimitiveId.Arc;
-            mElelmentType = ELEMENTTYPE.LINE_STRIP;
+            mElementType = ELEMENTTYPE.LINE_STRIP;
             mPrimitiveFace = face;
             mArc = arc;
-            mVertexList = createVertexList();
+            createVertexList();
         }
 
         /// <summary>
         /// 3D座標リストの作成
         /// </summary>
-        /// <returns></returns>
-        public override List<Point3D> createVertexList()
+        public override void createVertexList()
         {
             double da = (mArc.mEa - mArc.mSa) / mDiv;
             List<PointD> plist = mArc.toPointList(mDiv);
-            List<Point3D> vertexList = cnvPointD2Point3D(plist, mPrimitiveFace);
-            return vertexList;
+            mVertexList = cnvPointD2Point3D(plist, mPrimitiveFace);
         }
 
         /// <summary>
@@ -344,47 +415,15 @@ namespace Note3DApp
         public override Element createElement()
         {
             Element element = new Element();
-            element.addVertex(mVertexList, mElelmentType, mFaceColors);
+            element.addVertex(mVertexList, mElementType, mFaceColors);
             return element;
         }
 
         /// <summary>
-        /// 2D 表示(XY/YZ/ZX)
+        /// 固有データを文字列配列に変換
         /// </summary>
-        /// <param name="draw">グラフィック</param>
-        /// <param name="mp">変換マトリックス</param>
-        /// <param name="face">表示面</param>
-        public override void draw2D(Y3DDraw draw, double[,] mp, DISPMODE face)
-        {
-            List<PointD> pList;
-            draw.mBrush = mLineColor;
-            draw.mThickness = mLineThickness;
-            List<Point3D> vlist = mVertexList.ConvertAll(p => p.toMatrix(mp));
-            if (face == DISPMODE.disp2DXY) {
-                pList = vlist.ConvertAll(p => new PointD(p.x, p.y));
-            } else if (face == DISPMODE.disp2DYZ) {
-                pList = vlist.ConvertAll(p => new PointD(p.y, p.z));
-            } else {
-                pList = vlist.ConvertAll(p => new PointD(p.z, p.x));
-            }
-            draw.drawWPolyline(pList);
-        }
-
-
-        /// <summary>
-        /// Boxのピックの有無を調べる
-        /// </summary>
-        /// <param name="b">ピック領域</param>
-        /// <param name="mp">変換マトリックス</param>
-        /// <param name="face">表示面</param>
-        /// <returns>ピックの有無</returns>
-        public override bool pickChk(Box b, double[,] matrix, PRIMITIVEFACE face)
-        {
-            List<Point3D> vlist = mVertexList.ConvertAll(p => p.toMatrix(matrix));
-            return insideCrossChk(cnvPoint3D2PointD(vlist, face), b);
-        }
-
-        public override List<string> toDataList()
+        /// <returns>文字列配列</returns>
+        public override string[] toDataList()
         {
             List<string> dataList = new List<string>() {
                 "ArcData",
@@ -393,15 +432,20 @@ namespace Note3DApp
                 "Div", mDiv.ToString()
             };
 
-            return dataList;
+            return dataList.ToArray();
         }
-        public override void setDataList(List<string> list)
+
+        /// <summary>
+        /// 文字列配列から固有データを設定
+        /// </summary>
+        /// <param name="list">文字列配列</param>
+        public override void setDataList(string[] list)
         {
-            if (0 == list.Count || list[0] != "ArcData")
+            if (0 == list.Length || list[0] != "ArcData")
                 return;
             int ival;
             double val;
-            for (int i = 1; i < list.Count; i++) {
+            for (int i = 1; i < list.Length; i++) {
                 if (list[i] == "Arc") {
                     mArc.mCp.x = double.TryParse(list[++i], out val) ? val : 0;
                     mArc.mCp.y = double.TryParse(list[++i], out val) ? val : 0;
@@ -422,28 +466,31 @@ namespace Note3DApp
     {
         public List<PointD> mPolygon;
 
+        public PolygonPrimitive()
+        {
+            mPolygon = new List<PointD>();
+        }
+
         /// <summary>
         /// コンストラクタ
         /// </summary>
         /// <param name="points">座標リスト</param>
         /// <param name="face">作成面</param>
-        public PolygonPrimitive(List<PointD> points, PRIMITIVEFACE face = PRIMITIVEFACE.xy)
+        public PolygonPrimitive(List<PointD> points, DISPMODE face = DISPMODE.XY)
         {
             mPrimitiveId = PrimitiveId.Polygon;
-            mElelmentType = ELEMENTTYPE.LINE_LOOP;
+            mElementType = ELEMENTTYPE.LINE_LOOP;
             mPrimitiveFace = face;
-            mPolygon = points;
-            mVertexList = createVertexList();
+            mPolygon = points.ConvertAll(p => p.toCopy());
+            createVertexList();
         }
 
         /// <summary>
         /// 3D座標リストの作成
         /// </summary>
-        /// <returns></returns>
-        public override List<Point3D> createVertexList()
+        public override void createVertexList()
         {
-            List<Point3D> vertexList = cnvPointD2Point3D(mPolygon, mPrimitiveFace);
-            return vertexList;
+            mVertexList = cnvPointD2Point3D(mPolygon, mPrimitiveFace);
         }
 
         /// <summary>
@@ -453,45 +500,15 @@ namespace Note3DApp
         public override Element createElement()
         {
             Element element = new Element();
-            element.addVertex(mVertexList, mElelmentType, mFaceColors);
+            element.addVertex(mVertexList, mElementType, mFaceColors);
             return element;
         }
 
         /// <summary>
-        /// 2D 表示(XY/YZ/ZX)
+        /// 固有データを文字列配列に変換
         /// </summary>
-        /// <param name="draw">グラフィック</param>
-        /// <param name="mp">変換マトリックス</param>
-        /// <param name="face">表示面</param>
-        public override void draw2D(Y3DDraw draw, double[,] mp, DISPMODE face)
-        {
-            List<PointD> pList;
-            draw.mBrush = mLineColor;
-            draw.mThickness = mLineThickness;
-            List<Point3D> vlist = mVertexList.ConvertAll(p => p.toMatrix(mp));
-            if (face == DISPMODE.disp2DXY)
-                pList = vlist.ConvertAll(p => new PointD(p.x, p.y));
-            else if (face == DISPMODE.disp2DYZ)
-                pList = vlist.ConvertAll(p => new PointD(p.y, p.z));
-            else
-                pList = vlist.ConvertAll(p => new PointD(p.z, p.x));
-            draw.drawWPolygon(pList);
-        }
-
-        /// <summary>
-        /// Boxのピックの有無を調べる
-        /// </summary>
-        /// <param name="b">ピック領域</param>
-        /// <param name="mp">変換マトリックス</param>
-        /// <param name="face">表示面</param>
-        /// <returns>ピックの有無</returns>
-        public override bool pickChk(Box b, double[,] matrix, PRIMITIVEFACE face)
-        {
-            List<Point3D> vlist = mVertexList.ConvertAll(p => p.toMatrix(matrix));
-            return insideCrossChk(cnvPoint3D2PointD(vlist, face), b, true);
-        }
-
-        public override List<string> toDataList()
+        /// <returns>文字列配列</returns>
+        public override string[] toDataList()
         {
             List<string> dataList = new List<string>() {
                 "PolygonData", "Size", mPolygon.Count.ToString()
@@ -501,21 +518,26 @@ namespace Note3DApp
                 dataList.Add(mPolygon[i].y.ToString());
             }
 
-            return dataList;
+            return dataList.ToArray();
         }
-        public override void setDataList(List<string> list)
+
+        /// <summary>
+        /// 文字列配列から固有データを設定
+        /// </summary>
+        /// <param name="list">文字列配列</param>
+        public override void setDataList(string[] list)
         {
-            if (0 == list.Count || list[0] != "PolygonData")
+            if (0 == list.Length || list[0] != "PolygonData")
                 return;
             int ival;
             double val;
             int count;
-            for (int i = 1; i < list.Count; i++) {
+            for (int i = 1; i < list.Length; i++) {
                 if (list[i] == "Size") {
                     count = int.TryParse(list[++i], out ival) ? ival : 0;
                 } else {
                     PointD p = new PointD();
-                    p.x = double.TryParse(list[++i], out val) ? val : 0;
+                    p.x = double.TryParse(list[i], out val) ? val : 0;
                     p.y = double.TryParse(list[++i], out val) ? val : 0;
                     mPolygon.Add(p);
                 }
@@ -532,21 +554,28 @@ namespace Note3DApp
         public PointD mEp;      //  対角点(終点)
         public double mH;       //  高さ
 
+
+        public WireCubePrimitive()
+        {
+            mSp = new PointD();
+            mEp = new PointD();
+        }
+
         /// <summary>
         /// コンストラクタ
         /// </summary>
         /// <param name="sp">始点</param>
         /// <param name="ep">終点</param>
         /// <param name="face">作成面</param>
-        public WireCubePrimitive(PointD sp, PointD ep, double h = 1, PRIMITIVEFACE face = PRIMITIVEFACE.xy)
+        public WireCubePrimitive(PointD sp, PointD ep, double h = 1, DISPMODE face = DISPMODE.XY)
         {
             mPrimitiveId = PrimitiveId.WireCube;
-            mElelmentType = ELEMENTTYPE.LINES;
+            mElementType = ELEMENTTYPE.LINES;
             mPrimitiveFace = face;
             mSp = sp;
             mEp = ep;
             mH = h;
-            mVertexList = createVertexList();
+           createVertexList();
 
         }
 
@@ -554,7 +583,7 @@ namespace Note3DApp
         /// 3D座標リストの作成
         /// </summary>
         /// <returns></returns>
-        public override List<Point3D> createVertexList()
+        public override void createVertexList()
         {
             List<Point3D> vertexList = new List<Point3D> {
                 new Point3D(mSp.x, mSp.y, -mH/2), new Point3D(mSp.x, mEp.y, -mH/2),
@@ -570,16 +599,16 @@ namespace Note3DApp
                 new Point3D(mEp.x, mEp.y,  mH/2), new Point3D(mEp.x, mSp.y,  mH/2),
                 new Point3D(mEp.x, mSp.y,  mH/2), new Point3D(mSp.x, mSp.y,  mH/2),
             };
-            if (mPrimitiveFace == PRIMITIVEFACE.yz) {
+            if (mPrimitiveFace == DISPMODE.YZ) {
                 for (int i = 0; i < vertexList.Count; i++) {
                     vertexList[i] = new Point3D(vertexList[i].z, vertexList[i].x, vertexList[i].y);
                 }
-            } else if (mPrimitiveFace == PRIMITIVEFACE.zx) {
+            } else if (mPrimitiveFace == DISPMODE.ZX) {
                 for (int i = 0; i < vertexList.Count; i++) {
                     vertexList[i] = new Point3D(vertexList[i].y, vertexList[i].z, vertexList[i].x);
                 }
             }
-            return vertexList;
+            mVertexList = vertexList;
         }
 
         /// <summary>
@@ -589,52 +618,16 @@ namespace Note3DApp
         public override Element createElement()
         {
             Element element = new Element();
-            element.addVertex(mVertexList, mElelmentType, mFaceColors);
+            element.addVertex(mVertexList, mElementType, mFaceColors);
 
             return element;
         }
 
         /// <summary>
-        /// 2D 表示(XY/YZ/ZX)
+        /// 固有データを文字列配列に変換
         /// </summary>
-        /// <param name="draw">グラフィック</param>
-        /// <param name="mp">変換マトリックス</param>
-        /// <param name="face">表示面</param>
-        public override void draw2D(Y3DDraw draw, double[,] mp, DISPMODE face)
-        {
-            draw.mBrush = mLineColor;
-            draw.mThickness = mLineThickness;
-            List<Point3D> vlist = mVertexList.ConvertAll(p => p.toMatrix(mp));
-            for (int i = 0; i < vlist.Count - 1; i+= 2) {
-                if (face == DISPMODE.disp2DXY)
-                    draw.drawWLine(vlist[i].toPointXY(), vlist[i + 1].toPointXY());
-                else if (face == DISPMODE.disp2DYZ)
-                    draw.drawWLine(vlist[i].toPointYZ(), vlist[i + 1].toPointYZ());
-                else
-                    draw.drawWLine(vlist[i].toPointZX(), vlist[i + 1].toPointZX());
-            }
-        }
-
-        /// <summary>
-        /// Boxのピックの有無を調べる
-        /// </summary>
-        /// <param name="b">ピック領域</param>
-        /// <param name="mp">変換マトリックス</param>
-        /// <param name="face">表示面</param>
-        /// <returns>ピックの有無</returns>
-        public override bool pickChk(Box b, double[,] matrix, PRIMITIVEFACE face)
-        {
-            List<Point3D> vlist = mVertexList.ConvertAll(p => p.toMatrix(matrix));
-            List<PointD> points = cnvPoint3D2PointD(vlist, face);
-            for (int i = 0; i < points.Count; i += 2) {
-                List<PointD> plist = new List<PointD>() { points[i], points[i + 1] };
-                if (insideCrossChk(plist, b))
-                    return true;
-            }
-            return false;
-        }
-
-        public override List<string> toDataList()
+        /// <returns>文字列配列</returns>
+        public override string[] toDataList()
         {
             List<string> dataList = new List<string>() {
                 "WireCubeData",
@@ -643,20 +636,27 @@ namespace Note3DApp
                 "H", mH.ToString()
             };
 
-            return dataList;
+            return dataList.ToArray();
         }
-        public override void setDataList(List<string> list)
+
+        /// <summary>
+        /// 文字列配列から固有データを設定
+        /// </summary>
+        /// <param name="list">文字列配列</param>
+        public override void setDataList(string[] list)
         {
-            if (0 == list.Count || list[0] != "WireCubeData")
+            if (0 == list.Length || list[0] != "WireCubeData")
                 return;
             double val;
-            for (int i = 1; i < list.Count; i++) {
+            for (int i = 1; i < list.Length; i++) {
                 if (list[i] == "Sp") {
                     mSp.x = double.TryParse(list[++i], out val) ? val : 0;
                     mSp.y = double.TryParse(list[++i], out val) ? val : 0;
                 } else if (list[i] == "Ep") {
                     mEp.x = double.TryParse(list[++i], out val) ? val : 0;
                     mEp.y = double.TryParse(list[++i], out val) ? val : 0;
+                } else if (list[i] == "H") {
+                    mH = double.TryParse(list[++i], out val) ? val : 0;
                 }
             }
         }
@@ -672,29 +672,34 @@ namespace Note3DApp
         public PointD mEp;      //  対角点(終点)
         public double mH;       //  高さ
 
+        public CubePrimitive()
+        {
+            mSp = new PointD();
+            mEp = new PointD();
+        }
+
         /// <summary>
         /// コンストラクタ
         /// </summary>
         /// <param name="sp">始点</param>
         /// <param name="ep">終点</param>
         /// <param name="face">作成面</param>
-        public CubePrimitive(PointD sp, PointD ep, double h = 1, PRIMITIVEFACE face = PRIMITIVEFACE.xy)
+        public CubePrimitive(PointD sp, PointD ep, double h = 1, DISPMODE face = DISPMODE.XY)
         {
             mPrimitiveId = PrimitiveId.Cube;
-            mElelmentType = ELEMENTTYPE.QUADS;
+            mElementType = ELEMENTTYPE.QUADS;
             mPrimitiveFace = face;
             mSp = sp;
             mEp = ep;
             mH = h;
-            mVertexList = createVertexList();
+            createVertexList();
 
         }
 
         /// <summary>
         /// 3D座標リストの作成
         /// </summary>
-        /// <returns></returns>
-        public override List<Point3D> createVertexList()
+        public override void createVertexList()
         {
             List<Point3D> vertexList = new List<Point3D> {
                 //  XY面
@@ -714,16 +719,16 @@ namespace Note3DApp
                 new Point3D(mSp.x, mEp.y,  mH/2), new Point3D(mSp.x, mSp.y,  mH/2),
             };
 
-            if (mPrimitiveFace == PRIMITIVEFACE.yz) {
+            if (mPrimitiveFace == DISPMODE.YZ) {
                 for (int i = 0; i < vertexList.Count; i++) {
                     vertexList[i] = new Point3D(vertexList[i].z, vertexList[i].x, vertexList[i].y);
                 }
-            } else if (mPrimitiveFace == PRIMITIVEFACE.zx) {
+            } else if (mPrimitiveFace == DISPMODE.ZX) {
                 for (int i = 0; i < vertexList.Count; i++) {
                     vertexList[i] = new Point3D(vertexList[i].y, vertexList[i].z, vertexList[i].x);
                 }
             }
-            return vertexList;
+            mVertexList = vertexList;
         }
 
         /// <summary>
@@ -733,54 +738,16 @@ namespace Note3DApp
         public override Element createElement()
         {
             Element element = new Element();
-            element.addVertex(mVertexList, mElelmentType, mFaceColors);
+            element.addVertex(mVertexList, mElementType, mFaceColors);
 
             return element;
         }
 
         /// <summary>
-        /// 2D 表示(XY/YZ/ZX)
+        /// 固有データを文字列配列に変換
         /// </summary>
-        /// <param name="draw">グラフィック</param>
-        /// <param name="mp">変換マトリックス</param>
-        /// <param name="face">表示面</param>
-        public override void draw2D(Y3DDraw draw, double[,] mp, DISPMODE face)
-        {
-            draw.mBrush = mLineColor;
-            draw.mThickness = mLineThickness;
-            List<Point3D> vlist = mVertexList.ConvertAll(p => p.toMatrix(mp));
-            for (int i = 0; i < vlist.Count - 1; i += 2) {
-                if (face == DISPMODE.disp2DXY)
-                    draw.drawWLine(vlist[i].toPointXY(), vlist[i + 1].toPointXY());
-                else if (face == DISPMODE.disp2DYZ)
-                    draw.drawWLine(vlist[i].toPointYZ(), vlist[i + 1].toPointYZ());
-                else
-                    draw.drawWLine(vlist[i].toPointZX(), vlist[i + 1].toPointZX());
-            }
-        }
-
-        /// <summary>
-        /// Boxのピックの有無を調べる
-        /// </summary>
-        /// <param name="b">ピック領域</param>
-        /// <param name="mp">変換マトリックス</param>
-        /// <param name="face">表示面</param>
-        /// <returns>ピックの有無</returns>
-        public override bool pickChk(Box b, double[,] matrix, PRIMITIVEFACE face)
-        {
-            List<Point3D> vlist = mVertexList.ConvertAll(p => p.toMatrix(matrix));
-            List<PointD> points = cnvPoint3D2PointD(vlist, face);
-            for (int i = 0; i < points.Count; i += 4) {
-                List<PointD> plist = new List<PointD>() {
-                    points[i], points[i+1], points[i+2], points[i+3], points[i]
-                };
-                if (insideCrossChk(plist, b))
-                    return true;
-            }
-            return false;
-        }
-
-        public override List<string> toDataList()
+        /// <returns>文字列配列</returns>
+        public override string[] toDataList()
         {
             List<string> dataList = new List<string>() {
                 "CubeData",
@@ -789,21 +756,27 @@ namespace Note3DApp
                 "H", mH.ToString()
             };
 
-            return dataList;
+            return dataList.ToArray();
         }
 
-        public override void setDataList(List<string> list)
+        /// <summary>
+        /// 文字列配列から固有データを設定
+        /// </summary>
+        /// <param name="list">文字列配列</param>
+        public override void setDataList(string[] list)
         {
-            if (0 == list.Count || list[0] != "WireCubeData")
+            if (0 == list.Length || list[0] != "CubeData")
                 return;
             double val;
-            for (int i = 1; i < list.Count; i++) {
+            for (int i = 1; i < list.Length; i++) {
                 if (list[i] == "Sp") {
                     mSp.x = double.TryParse(list[++i], out val) ? val : 0;
                     mSp.y = double.TryParse(list[++i], out val) ? val : 0;
                 } else if (list[i] == "Ep") {
                     mEp.x = double.TryParse(list[++i], out val) ? val : 0;
                     mEp.y = double.TryParse(list[++i], out val) ? val : 0;
+                } else if (list[i] == "H") {
+                    mH = double.TryParse(list[++i], out val) ? val : 0;
                 }
             }
 
